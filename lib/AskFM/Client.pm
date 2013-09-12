@@ -4,8 +4,75 @@ use WWW::Mechanize ;
 use HTML::Tree ;
 use HTML::TreeBuilder ;
 
+use feature 'say' ;
 
 use Moose ;
+
+=pod
+
+=head1 NAME
+
+AskFM::Client - A simple client written to interface with Ask.fm website
+
+=head1 SYNOPSIS
+
+  ## Login into ask.fm with your credentials
+  my $client = AskFM::Client->new (username => 'myusername',
+                                   password=> 'mypassword') ;
+
+  ## retrieve questions asked to you
+  ## @my_questions is an array of objects of class AskFM::Question
+  my @my_questions = $client->my_questions ;
+
+  ## retrieve today's question
+  ## $today_question is an object of class AskFM::Question
+
+  my $today_question = $client->today_question ;
+
+  ## Lookup a certain user
+  ## $otacon22 is an object of class AskFM::User
+
+  my $otacon22 = $client->get_user "Otacon22" ;
+
+  ## if that user exists, ask him something ?
+  ## $question_asked is an object of class AskFM::Question
+
+  my $question_asked ;
+  if ( $otacon22 ) {
+    $question_asked = $otacon22->ask("Your next job is to implement NAT66, enjoy! :P") ;
+  }
+
+  ## We want to read Otacon22's wall (assuming account otacon22 exists)
+  ## @otacon22_wall is an array of object of class AskFM::Question
+
+  my @otacon_wall = $otacon22->wall ;
+
+=head1 DESCRIPTION
+
+This module provides a simple interface to Ask.fm website, in order to
+have fun with its users and do neat things.
+
+B<REMEMBER NOT TO BE AN IDIOT! DON'T BE EVIL AND DON'T HARM OTHER USERS>
+
+=head1 RETURN VALUES
+
+Most of the times, AskFM::Client will return object (or array of objects) of
+classes of the same namespace (so, objects of classes like
+AskFM::{Question,User,Answer})
+
+When, for example, a user is not found, C<undef> will be returned.
+
+=cut
+
+
+has 'username' => (isa => "Str",
+		   is => "rw",
+		   required => 1) ;
+
+has 'password' => (isa => "Str",
+		   is => "rw",
+		   required => 1) ;
+
 
 has 'LOGIN_PAGE' => (isa => "Str",
 		     is => "ro",
@@ -20,25 +87,14 @@ has 'QUESTIONS_PAGE' => (isa => "Str",
 has 'robot' => (isa => 'WWW::Mechanize',
 		is => "ro",
 		init_arg => undef,
-		default => sub { 
+		default => sub {
 		  my $r = WWW::Mechanize->new( agent => "AskFM::Client"); }
 	       ) ;
 
-has 'username' => (isa => "Str",
+has 'logged_in' => (isa => "Bool",
 		   is => "rw",
-		   required => 1) ;
-
-has 'password' => (isa => "Str",
-		   is => "rw",
-		   required => 1) ;
-
-
-sub BUILD {
-  my $self = shift ;
-  my $args = shift ; # ocio, e' un hashref
-  
-  say " >>>> Sono dentro BUILD <<<<" ;
-}
+		   default => undef,
+		   init_arg => undef) ;
 
 sub login {
   my $self = shift ;
@@ -66,12 +122,15 @@ sub login {
 
   my $questions_html = $robot->get( $self->QUESTIONS_PAGE) ;
 
-  return $questions_html->decoded_content ;
+  $self->logged_in = 1 ;
+  return ; # $questions_html->decoded_content ;
 }
 
 
 sub my_questions {
   my $self = shift ;
+
+  $self->login unless ($self->logged_in) ;
 
   my $tree = HTML::TreeBuilder->new_from_file("./questions.html") ;
 
@@ -110,3 +169,5 @@ sub my_questions {
 
   return @questions ;
 }
+
+return 1 ;
