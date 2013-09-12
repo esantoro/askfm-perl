@@ -73,6 +73,10 @@ has 'password' => (isa => "Str",
 		   is => "rw",
 		   required => 1) ;
 
+has 'BASEURL' => (isa => "Str",
+		 is => "ro",
+		 init_arg => undef,
+		 default => "http://ask.fm/") ;
 
 has 'LOGIN_PAGE' => (isa => "Str",
 		     is => "ro",
@@ -93,7 +97,7 @@ has 'robot' => (isa => 'WWW::Mechanize',
 
 has 'logged_in' => (isa => "Bool",
 		   is => "rw",
-		   default => undef,
+		   default => 0,
 		   init_arg => undef) ;
 
 sub login {
@@ -122,7 +126,7 @@ sub login {
 
   my $questions_html = $robot->get( $self->QUESTIONS_PAGE) ;
 
-  $self->logged_in = 1 ;
+  $self->logged_in(1) ;
   return ; # $questions_html->decoded_content ;
 }
 
@@ -168,6 +172,38 @@ sub my_questions {
   }
 
   return @questions ;
+}
+
+sub delete_all_questions {
+  my $self = shift ;
+
+  $self->login unless ($self->logged_in) ;
+
+  #todo: 
+  # 1 - get $self->QUESTION_PAGE
+  # 2 - get auth token
+  # 3 - post to /questions/delete :
+  #      _method = delete
+  #      authenticity_token = (token del punto 2)
+  ## auth token regexp:  s.setAttribute('value', '4Yu+w5xCgRsPH/OaMlkuSwmvuHUjAhxk0+05br5GPyM=')
+
+  my $robot = $self->robot ;
+
+  my $questions_html = $robot->get($self->QUESTIONS_PAGE)->decoded_content ;
+
+  my $token_text ;
+  # s.setAttribute('value', '4Yu+w5xCgRsPH/OaMlkuSwmvuHUjAhxk0+05br5GPyM=');
+  ($token_text) = ($questions_html =~ /s\.setAttribute\(\'value\', \'(\S*)\'\);/) ;
+
+  say "Token: " . $token_text ;
+
+  my $params = {_method => "delete",
+	       authenticity_token => $token_text} ;
+  my $response = $robot->post($self->BASEURL . "/questions/delete", $params) ;
+
+  say $response->code ;
+
+  return $response->code ;
 }
 
 return 1 ;
