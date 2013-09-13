@@ -1,5 +1,21 @@
 package AskFM::User ;
 
+=pod
+
+=head1 NAME
+
+AskFM::User - A class representing an Ask.fm user
+
+=head1 SYNOPSIS
+
+  # create user:
+  my $user = AskFM::User->new (username => "snoopybbt") ;
+  
+  # using a previously instantiated client, ask user something:
+  $user->ask($client, $question, $anonymous) ;
+
+=cut
+
 use Moose ;
 
 has 'username' => (isa => "Str",
@@ -9,27 +25,9 @@ has 'username' => (isa => "Str",
 
 
 sub ask {
-  my ($self, $client, $question) = @_ ;
+  my ($self, $client, $question, $anonymous) = @_ ;
 
-  my $robot = $client->robot ;
-
-  my $response ;
-  $response = $robot->get($self->wall_url) ;
-
-  my $question_form = $robot->form_id("question_form") ;
-
-  my $form_params = {authenticity_token => $question_form->value("authenticity_token"),
-		     "question[question_text]" => $question } ;
-
-  $response = $robot->post($self->wall_url . "/questions/create", $form_params) ;
-
-  if ( $response->is_success() ) {
-    return 1 ;
-  }
-  else {
-    return undef ;
-  }
-
+  return $client->ask($self, $question, $anonymous) ;
 }
 
 sub wall {
