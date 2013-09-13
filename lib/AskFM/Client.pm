@@ -147,9 +147,6 @@ sub my_questions {
 
   my $n_questions = @q_elements || 0 ;
 
-  say "Hai $n_questions domande a cui rispondere" ;
-
-  say "Le domande: " ;
 
   my @questions ;
 
@@ -195,15 +192,39 @@ sub delete_all_questions {
   # s.setAttribute('value', '4Yu+w5xCgRsPH/OaMlkuSwmvuHUjAhxk0+05br5GPyM=');
   ($token_text) = ($questions_html =~ /s\.setAttribute\(\'value\', \'(\S*)\'\);/) ;
 
-  say "Token: " . $token_text ;
+  #say "Token: " . $token_text ;
 
   my $params = {_method => "delete",
 	       authenticity_token => $token_text} ;
   my $response = $robot->post($self->BASEURL . "/questions/delete", $params) ;
 
-  say $response->code ;
+  # say $response->code ;
 
-  return $response->code ;
+  if ( $response->is_success ) {
+    return 1 ;
+  }
+  else { 
+    return undef; 
+  }
+}
+
+sub get_user {
+  my ($self, $target) = @_ ;
+
+  my $robot = $self->robot ;
+
+  my $response = $robot->get($self->BASEURL . $target) ;
+
+  # say $response->code ;
+
+  my $user = undef ;
+  if ( $response->is_success() ){
+    ## create a AskFM::User object
+
+    $user = AskFM::User->new (username => $target)
+  }
+
+  return $user ;
 }
 
 return 1 ;
