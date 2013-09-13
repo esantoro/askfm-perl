@@ -10,3 +10,5 @@ has 'id' => (is => "ro",
 has 'body' => (is => "ro",
 	       isa => "Str",
 	       required => 1) ;
+
+1 ;
