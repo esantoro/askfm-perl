@@ -14,6 +14,8 @@ use Moose ;
 
 AskFM::Client - A simple client written to interface with Ask.fm website
 
+B<At the moment (13/09/2013) this module requires you to have an account on ask.fm>
+
 =head1 SYNOPSIS
 
   ## Login into ask.fm with your credentials
@@ -24,7 +26,7 @@ AskFM::Client - A simple client written to interface with Ask.fm website
   ## @my_questions is an array of objects of class AskFM::Question
   my @my_questions = $client->my_questions ;
 
-  ## retrieve today's question
+  ## retrieve today's question (WARNING: NOT IMPLEMENTED YET)
   ## $today_question is an object of class AskFM::Question
 
   my $today_question = $client->today_question ;
@@ -34,12 +36,18 @@ AskFM::Client - A simple client written to interface with Ask.fm website
 
   my $otacon22 = $client->get_user "Otacon22" ;
 
-  ## if that user exists, ask him something ?
-  ## $question_asked is an object of class AskFM::Question
+  ## if that user exists, ask him something!
+  ## NOTE: ask.fm does not return question id, so we have no 
+  ## way to track questions we asked
 
-  my $question_asked ;
   if ( $otacon22 ) {
-    $question_asked = $otacon22->ask("Your next job is to implement NAT66, enjoy! :P") ;
+    # using $client, ask $question as anonymous
+    $otacon22->ask($client, "Your next job is to implement NAT66, enjoy! :P", 1) ;
+
+    # using $client, ask $question with $client user credentials
+    $otacon22->ask($client, "Your next job is to implement NAT66, enjoy! :P", 0) ;
+
+    # in general: $user->ask($client, $question, $anonymous)
   }
 
   ## We want to read Otacon22's wall (assuming account otacon22 exists)
@@ -100,7 +108,13 @@ has 'logged_in' => (isa => "Bool",
 		   default => 0,
 		   init_arg => undef) ;
 
+### TODO: SAVE OUR USER AS INSTANCE OF AskFM::User
+has 'user' => (isa => 'AskFM::User',
+	      is => 'ro',
+	      init_arg => undef) ;
+
 sub login {
+
   my $self = shift ;
   my $robot = $self->robot ;
 
@@ -127,16 +141,22 @@ sub login {
   my $questions_html = $robot->get( $self->QUESTIONS_PAGE) ;
 
   $self->logged_in(1) ;
-  return ; # $questions_html->decoded_content ;
+
+  return ;
 }
 
 
 sub my_questions {
+
   my $self = shift ;
 
   $self->login unless ($self->logged_in) ;
 
-  my $tree = HTML::TreeBuilder->new_from_file("./questions.html") ;
+  my $questions_html = $self->robot->get( $self->QUESTIONS_PAGE)->decoded_content ;
+
+  my $tree = HTML::TreeBuilder->new ; #parse($questions_html) ;
+  $tree->parse($questions_html) ;
+
 
   my $root = $tree->elementify() ;
 
@@ -176,13 +196,14 @@ sub delete_all_questions {
 
   $self->login unless ($self->logged_in) ;
 
-  #todo: 
+  # todo:
   # 1 - get $self->QUESTION_PAGE
   # 2 - get auth token
   # 3 - post to /questions/delete :
   #      _method = delete
   #      authenticity_token = (token del punto 2)
-  ## auth token regexp:  s.setAttribute('value', '4Yu+w5xCgRsPH/OaMlkuSwmvuHUjAhxk0+05br5GPyM=')
+  ## auth token regexp:
+  ##     s.setAttribute('value', '4Yu+w5xCgRsPH/OaMlkuSwmvuHUjAhxk0+05br5GPyM=')
 
   my $robot = $self->robot ;
 
@@ -203,9 +224,40 @@ sub delete_all_questions {
   if ( $response->is_success ) {
     return 1 ;
   }
-  else { 
-    return undef; 
+  else {
+    return undef;
   }
+}
+
+sub ask {
+  my ($self, $target, $question, $anonymous) = @_ ;
+
+  my $robot = $self->robot ;
+
+  if ($anonymous) {
+    $self->logout if $self->logged_in ;
+  }
+  else {
+    $self->login unless $self->logged_in ;
+  }
+
+  my $response ;
+  $response = $robot->get($target->wall_url) ;
+
+  my $question_form = $robot->form_id("question_form") ;
+
+  my $form_params = {authenticity_token => $question_form->value("authenticity_token"),
+		     "question[question_text]" => $question } ;
+
+  $response = $robot->post($target->wall_url . "/questions/create", $form_params) ;
+
+  if ( $response->is_success() ) {
+    return 1 ;
+  }
+  else {
+    return undef ;
+  }
+
 }
 
 sub get_user {
@@ -226,5 +278,94 @@ sub get_user {
 
   return $user ;
 }
+
+sub logout {
+  my $self = shift ;
+
+  my $robot = $self->robot ;
+  my $response = $robot->get($self->BASEURL) ;
+
+  ## Logout form has not id or name, so we have to go and search for it
+  ## --> seek and destroy!!
+
+  foreach my $form ($robot->forms) {
+    if ($form->action eq "/logout" && $form->method eq "POST") {
+      my $response = $robot->request($form->click()) ;
+
+      if ($response->is_success ) {
+	return 1 ;
+      }
+      else {
+	return 0 ;
+      }
+    }
+  }
+}
+
+sub answer {
+  my ($self, $question, $answer) = @_ ;
+
+  my $robot = $self->robot ;
+
+
+  # Questions answer page is something like :
+  #    http://ask.fm/snoopybbt/questions/6571366****/reply
+  # where as "6571366****" is the question_id (in which, in this case,
+  # i have obscured last four digits
+
+  my $answer_url = $self->BASEURL . '/' . $self->username . '/questions/' . $question->id . '/reply' ;
+  my $response = $robot->get($answer_url) ;
+
+  ## we get the form...
+  my $question_form = $robot->form_id("question_form_" . $question->id) ;
+
+  # we fill it with an answer...
+  $question_form->param("question[answer_text]", $answer) ;
+
+  ## we submit the form..
+  $response = $robot->request($question_form->click) ;
+
+  if ($response->is_success) {
+    return 1 ;
+  }
+  else {
+    return 0 ;
+  }
+}
+
+
+=pod
+
+=head1 EXAMPLES
+
+  #!perl
+
+  use AskFM::Client ;
+  use AskFM::User ;
+
+  use feature 'say' ;
+
+  my $client1 = AskFM::Client->new(username => "askfmt1",
+				 password => "WFRVl*****") ;
+
+  my $client2 = AskFM::Client->new(username => "askfmt2",
+				password => "VFK0Hc****") ;
+
+  my $client_snoopy = AskFM::Client->new(username => "snoopybbt",
+				      password => "****") ;
+
+  $client_snoopy->delete_all_questions ;
+
+  my $snoopybbt = $client1->get_user("snoopybbt");
+
+  if ($snoopybbt) {
+    $client1->ask($snoopybbt, "AskFM::Client funziona bene!! (1) :D", 1) ;
+
+    sleep 120 ;
+
+    $client1->ask($snoopybbt, "AskFM::Client funziona bene!! (2) :D", 0) ;
+  }
+
+=cut
 
 return 1 ;
